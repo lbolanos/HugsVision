@@ -4,6 +4,8 @@ import os
 import math
 import random
 import argparse
+import logging
+import sys
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
@@ -21,7 +23,29 @@ from hugsvision.dataio.CocoDetectionDataset import CocoDetection
 from hugsvision.dataio.ObjectDetectionCollator import ObjectDetectionCollator
 from hugsvision.inference.ObjectDetectionInference import ObjectDetectionInference
 
+from hugsvision.datasets import get_coco_api_from_dataset
+from hugsvision.datasets.coco_eval import CocoEvaluator
+from tqdm.notebook import tqdm
+
 from transformers import DetrFeatureExtractor
+
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logger = logging.getLogger('ObjectDetectionTrainer')
+logger.setLevel(logging.DEBUG)
+print = logger.info
+class Logger(object):
+    def __init__(self, std):
+        self.terminal = std
+
+    def write(self, message):
+        self.terminal.write(message)
+        logger.info(message)
+
+    def flush(self):
+        pass
+
+sys.stdout = Logger(sys.stdout)
+sys.stderr = Logger(sys.stderr)
 
 class ObjectDetectionTrainer:
 
@@ -52,7 +76,7 @@ class ObjectDetectionTrainer:
     self.train_path        = train_path
     self.dev_path          = dev_path
     self.test_path         = test_path
-    self.output_dir        = output_dir
+    self.output_dir        = os.path.join(output_dir, self.model_name.upper())
     self.lr                = lr
     self.lr_backbone       = lr_backbone
     self.batch_size        = batch_size
@@ -64,6 +88,7 @@ class ObjectDetectionTrainer:
     self.nbr_gpus          = nbr_gpus
     self.model_path        = model_path
     self.num_workers       = num_workers
+
 
     # Processing device (CPU / GPU)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -77,12 +102,29 @@ class ObjectDetectionTrainer:
     # Get the classifier collator
     self.collator = ObjectDetectionCollator(self.feature_extractor)
 
+
     # Get the model output path
     self.output_path = self.__getOutputPath()
     self.logs_path   = self.output_path
-    
     # Open the logs file
     self.__openLogs()
+
+    print(f"model_name={model_name} "
+          f"lr={lr} "
+          f"lr_backbone={lr_backbone} "
+          f"batch_size={batch_size} "
+          f"max_epochs={max_epochs} "
+          f"shuffle={shuffle} "
+          f"augmentation={augmentation} "
+          f"weight_decay={weight_decay} "
+          f"max_steps={max_steps} "
+          f"nbr_gpus={nbr_gpus} "
+          f"model_path={model_path} "
+          f"num_workers={num_workers} "
+          f"train_path={train_path} "
+          f"dev_path={dev_path} "
+          f"test_path={test_path} "
+          f"output_dir={output_dir} ")
 
     # Split and convert to dataloaders
     self.train, self.dev, self.test = self.__splitDatasets(self.num_workers)
@@ -121,6 +163,7 @@ class ObjectDetectionTrainer:
         gpus              = self.nbr_gpus,
         max_epochs        = self.max_epochs,
         max_steps         = self.max_steps,
+        default_root_dir  = self.output_dir,
         gradient_clip_val = 0.1
     )
 
@@ -144,10 +187,16 @@ class ObjectDetectionTrainer:
   """
   📜 Open the logs file
   """
-  def __openLogs(self):    
-
+  def __openLogs(self):
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     # Open the logs file
     self.logs_file = open(self.logs_path + "/logs.txt", "a")
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler(self.logs_path + "/logs.txt")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
 
   """
   📍 Get the path of the output model
@@ -156,7 +205,7 @@ class ObjectDetectionTrainer:
 
     path = os.path.join(
       self.output_dir,
-      self.model_name.upper() + "/" + str(self.max_epochs) + "_" + datetime.today().strftime("%Y-%m-%d-%H-%M-%S")
+        str(self.max_epochs if self.max_epochs else self.max_steps) + "_" + datetime.today().strftime("%Y-%m-%d-%H-%M-%S")
     )
 
     # Create the full path if doesn't exist yet
@@ -228,7 +277,36 @@ class ObjectDetectionTrainer:
   🧪 Evaluate the performances of the system of the test sub-dataset
   """
   def evaluate(self):
-    print("Not implemented yet!")
+    base_ds = get_coco_api_from_dataset(self.test_dataset)
+
+    iou_types = ['bbox']
+    coco_evaluator = CocoEvaluator(base_ds, iou_types)  # initialize evaluator with ground truths
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    self.model.to(device)
+    self.model.eval()
+
+    print("Running evaluation...")
+
+    for idx, batch in enumerate(tqdm(self.test_dataloader)):
+      # get the inputs
+      pixel_values = batch["pixel_values"].to(device)
+      pixel_mask = batch["pixel_mask"].to(device)
+      labels = [{k: v.to(device) for k, v in t.items()} for t in
+                batch["labels"]]  # these are in DETR format, resized + normalized
+
+      # forward pass
+      outputs = self.model.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+      orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+      results = self.feature_extractor.post_process(outputs, orig_target_sizes)  # convert outputs of model to COCO api
+      res = {target['image_id'].item(): output for target, output in zip(labels, results)}
+      coco_evaluator.update(res)
+
+    coco_evaluator.synchronize_between_processes()
+    coco_evaluator.accumulate()
+    coco_evaluator.summarize()
     return False
 
   """
@@ -238,7 +316,8 @@ class ObjectDetectionTrainer:
 
     inference = ObjectDetectionInference(
       self.feature_extractor,
-      self.model
+      self.model,
+      IMG_OUT=os.path.join(self.output_dir, "out_img")
     )
 
     return inference.predict(img_path)

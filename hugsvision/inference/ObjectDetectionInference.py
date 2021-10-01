@@ -15,12 +15,13 @@ class ObjectDetectionInference:
   """
   🤗 Constructor for the object detection trainer
   """
-  def __init__(self, feature_extractor, model):
+  def __init__(self, feature_extractor, model, IMG_OUT = "./out_img/"):
 
     self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
     self.feature_extractor = feature_extractor
     self.model = model
+    self.IMG_OUT = IMG_OUT
     print("Model loaded!")
     
     # Colors for visualization
@@ -77,12 +78,10 @@ class ObjectDetectionInference:
 
     plt.axis('off')
 
-    IMG_OUT = "./out_img/"
+    if not os.path.exists(self.IMG_OUT):
+      os.makedirs(self.IMG_OUT)
 
-    if not os.path.exists(IMG_OUT):
-      os.makedirs(IMG_OUT)
-
-    plt.savefig(IMG_OUT + datetime.today().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg")
+    plt.savefig(self.IMG_OUT + datetime.today().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg")
 
   def visualize_predictions(self, image, outputs, threshold=0.2):
 
