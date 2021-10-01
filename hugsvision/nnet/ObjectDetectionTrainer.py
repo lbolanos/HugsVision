@@ -45,6 +45,7 @@ class ObjectDetectionTrainer:
     max_steps    = 10000,
     nbr_gpus     = -1,
     model_path   = "facebook/detr-resnet-50",
+    num_workers  = None,
   ):
 
     self.model_name        = model_name
@@ -62,6 +63,7 @@ class ObjectDetectionTrainer:
     self.max_steps         = max_steps
     self.nbr_gpus          = nbr_gpus
     self.model_path        = model_path
+    self.num_workers       = num_workers
 
     # Processing device (CPU / GPU)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -83,7 +85,7 @@ class ObjectDetectionTrainer:
     self.__openLogs()
 
     # Split and convert to dataloaders
-    self.train, self.dev, self.test = self.__splitDatasets()
+    self.train, self.dev, self.test = self.__splitDatasets(self.num_workers)
 
     # Get labels and build the id2label
 
@@ -166,7 +168,7 @@ class ObjectDetectionTrainer:
   """
   ✂️ Split the dataset into sub-datasets
   """
-  def __splitDatasets(self):
+  def __splitDatasets(self, workers=None):
 
     print("Load Datasets...")
     
@@ -192,7 +194,8 @@ class ObjectDetectionTrainer:
     print(self.val_dataset)
     print(self.test_dataset)
 
-    workers = int(os.cpu_count() * 0.75)
+    if workers is None:
+        workers = int(os.cpu_count() * 0.75)
 
     # Train Dataloader
     self.train_dataloader = DataLoader(
