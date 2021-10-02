@@ -6,6 +6,7 @@ import random
 import argparse
 import logging
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
@@ -70,6 +71,7 @@ class ObjectDetectionTrainer:
     nbr_gpus     = -1,
     model_path   = "facebook/detr-resnet-50",
     num_workers  = None,
+    save_pth = False
   ):
 
     self.model_name        = model_name
@@ -142,6 +144,12 @@ class ObjectDetectionTrainer:
     print(self.id2label)
     print(self.label2id)
     
+    labels_path=os.path.join(self.output_path,"labels.json")
+    str_content = json.dumps(self.id2label, ensure_ascii=False, sort_keys=False, indent='\t')
+    with open(labels_path, "w", encoding="utf8") as writer:
+        writer.write(str_content)
+    
+    
     """
     🏗️ Build the Model
     """
@@ -177,8 +185,11 @@ class ObjectDetectionTrainer:
     # Fine-tuning
     self.trainer.fit(self.model)
 
-    # Save for huggingface
-    self.model.model.save_pretrained(self.output_path)
+    if save_pth:
+        torch.save(self.trainer.model.state_dict(), self.output_path + ".pth")
+    else:
+        # Save for huggingface
+        self.model.model.save_pretrained(self.output_path)
     print("Model saved at: \033[93m" + self.output_path + "\033[0m")
 
     # Close the logs file

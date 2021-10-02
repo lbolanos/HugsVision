@@ -1,13 +1,14 @@
 import os
+import json
 from datetime import datetime
 
 import torch
 from transformers import DetrFeatureExtractor, DetrForObjectDetection, pipeline
-
+from hugsvision.models.InferenceDetr import InferenceDetr
 from PIL import Image
 
 import matplotlib
-matplotlib.use('agg')
+# matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 class ObjectDetectionInference:
@@ -15,12 +16,29 @@ class ObjectDetectionInference:
   """
   🤗 Constructor for the object detection trainer
   """
-  def __init__(self, feature_extractor, model, IMG_OUT = "./out_img/"):
+  def __init__(self, feature_extractor = None, model=None, model_file_path=None, model_file_name="pytorch_model.bin",
+               model_path="facebook/detr-resnet-50", IMG_OUT = "./out_img/", is_pth=False):
 
     self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-    self.feature_extractor = feature_extractor
-    self.model = model
+    if feature_extractor is None:
+      self.feature_extractor = DetrFeatureExtractor.from_pretrained(model_path)
+    else:
+      self.feature_extractor = feature_extractor
+    if model is None:
+      model_file = os.path.join(model_file_path, model_file_name)
+      if is_pth:
+        labels_path = os.path.join(model_file_path, "labels.json")
+        with open(labels_path, "r", encoding="utf8") as f:
+          str_content = f.read()
+          self.id2label = json.loads(str_content)
+        self.model = InferenceDetr(model_path=model_path, id2label=id2label)
+        self.model.load_state_dict(torch.load(model_file))
+      else:
+        self.model = InferenceDetr(model_path=model_file_path)
+        self.id2label = self.model.model.config.id2label
+    else:
+      self.model = model
+      self.id2label = self.model.model.config.id2label
     self.IMG_OUT = IMG_OUT
     print("Model loaded!")
     
@@ -41,12 +59,15 @@ class ObjectDetectionInference:
     return b
 
   def plot_results(self, pil_img, prob, boxes):
+    #plt.figure(figsize=(10,16))
+    my_dpi = 96
+    img_w, img_h = pil_img.size
+    plt.figure(figsize=(img_w / my_dpi, img_h / my_dpi), dpi=my_dpi)
 
-    plt.figure(figsize=(16,10))
     plt.imshow(pil_img)
     ax = plt.gca()
 
-    print(self.model.model.config.id2label)
+    print(self.id2label)
 
     colors = self.COLORS * 100
 
@@ -73,15 +94,18 @@ class ObjectDetectionInference:
         cl = p.argmax()
 
         # Draw the label
-        text = f'{self.model.model.config.id2label[cl.item()]}: {p[cl]:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
+        #text = f'{self.id2label[cl.item()]}: {p[cl]:0.2f}'
+        #ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
 
     plt.axis('off')
 
     if not os.path.exists(self.IMG_OUT):
       os.makedirs(self.IMG_OUT)
 
-    plt.savefig(self.IMG_OUT + datetime.today().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg")
+    file_name_jpg = os.path.join(self.IMG_OUT, datetime.today().strftime("%Y-%m-%d-%H-%M-%S") + ".jpg")
+    plt.savefig(file_name_jpg)
+    print(f"Image Saved: {file_name_jpg}" )
+    plt.show()
 
   def visualize_predictions(self, image, outputs, threshold=0.2):
 
@@ -113,7 +137,7 @@ class ObjectDetectionInference:
   Return: image, probas, bboxes_scaled
   """
   def predict(self, img_path: str, threshold=0.2):
-
+    print(f"predict img_path={img_path}")
     # Load the image
     image_array = Image.open(img_path)
 
