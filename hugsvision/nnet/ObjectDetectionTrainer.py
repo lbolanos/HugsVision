@@ -23,7 +23,7 @@ from hugsvision.models.Detr import Detr
 from hugsvision.dataio.CocoDetectionDataset import CocoDetection
 from hugsvision.dataio.ObjectDetectionCollator import ObjectDetectionCollator
 from hugsvision.inference.ObjectDetectionInference import ObjectDetectionInference
-
+from hugsvision.utils.InferencePlot import InferencePlot
 from hugsvision.datasets import get_coco_api_from_dataset
 from hugsvision.datasets.coco_eval import CocoEvaluator
 from tqdm.notebook import tqdm
@@ -323,12 +323,16 @@ class ObjectDetectionTrainer:
   """
   🧪 Test on a single image
   """
-  def testing(self, img_path):
+  def testing(self, img_path, show_tag=True, show_confidence=True, show_tags=None):
 
     inference = ObjectDetectionInference(
       self.feature_extractor,
-      self.model,
-      IMG_OUT=os.path.join(self.output_dir, "out_img")
+      self.model
     )
 
-    return inference.predict(img_path)
+    image, probas, bboxes_scaled = inference.predict(img_path)
+    plot_inf = InferencePlot(inference.id2label,
+                             IMG_OUT=os.path.join(self.output_dir, "out_img"),
+                             show_tag=show_tag, show_confidence=show_confidence, show_tags=show_tags)
+    plot_inf.plot_results(image, probas, bboxes_scaled)
+    return image, probas, bboxes_scaled
