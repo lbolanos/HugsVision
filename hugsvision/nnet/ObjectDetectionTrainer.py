@@ -131,7 +131,9 @@ class ObjectDetectionTrainer:
           f"output_dir={self.output_dir} ")
 
     # Split and convert to dataloaders
-    self.train, self.dev, self.test = self.__splitDatasets(self.num_workers, coco_file="_annotations.coco.json")
+    self.train, self.dev, self.test = self.__splitDatasets(self.num_workers, coco_file=coco_file)
+
+    self.sample_train()
 
     # Get labels and build the id2label
 
@@ -288,6 +290,55 @@ class ObjectDetectionTrainer:
     )
 
     return self.train_dataloader, self.val_dataloader, self.test_dataloader
+
+  def sample_train(self):
+      from PIL import Image, ImageDraw
+      import numpy as np
+      label2color = [ (0, 165, 255),
+                      (36, 99, 154),
+                      (225, 105, 65),
+                      (196, 228, 255),
+                      (0, 0, 255),
+                     (255, 0, 0),
+                      (0, 128, 0),
+                     (128, 0, 0),
+                      (0, 255, 0),  # 51, 153, 255
+                      (25, 25, 112),
+                      (0, 255, 255),
+                      (0, 145, 255),
+                      (195, 255, 170),
+                      (128, 128, 0),
+                      (0, 204, 255),
+                      (255, 0, 191),
+                      (128, 0, 128),
+                      (0, 0, 255),
+                      (192, 192, 192)
+                     ]
+      image_ids = self.train_dataset.coco.getImgIds()
+      # let's pick a random image
+      image_id = image_ids[np.random.randint(0, len(image_ids))]
+      print('Image n°{}'.format(image_id))
+      image = self.train_dataset.coco.loadImgs(image_id)[0]
+      image = Image.open(os.path.join(self.train_path, image['file_name']))
+
+      annotations = self.train_dataset.coco.imgToAnns[image_id]
+      if image.mode == "L":
+          image = image.convert('RGB')
+      draw = ImageDraw.Draw(image, "RGBA")
+
+      cats = self.train_dataset.coco.cats
+      id2label = {k: v['name'] for k, v in cats.items()}
+
+      for annotation in annotations:
+          box = annotation['bbox']
+          class_idx = annotation['category_id']
+          x, y, w, h = tuple(box)
+          draw.rectangle((x, y, x + w, y + h), outline=label2color[class_idx], width=2)
+          draw.text((x, y), id2label[class_idx], fill='white')
+      out_sample_dir = os.path.join(self.output_path, "out_img")
+      if not os.path.isdir(out_sample_dir):
+          os.makedirs(out_sample_dir)
+      image.save(os.path.join(out_sample_dir, "sample_" + str(image_id) + ".jpg"))
 
   """
   🧪 Evaluate the performances of the system of the test sub-dataset
