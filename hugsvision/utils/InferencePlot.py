@@ -45,6 +45,11 @@ class InferencePlot:
 
         # For each bbox
         for p, (xmin, ymin, xmax, ymax), c in zip(prob, boxes.tolist(), colors):
+            # Get the highest probability
+            cl = p.argmax()
+            tag = self.id2label[cl.item()]
+            if tag not in self.show_tags:
+                continue
             # Draw the bbox as a rectangle
             ax.add_patch(plt.Rectangle(
                 (xmin, ymin),
@@ -54,14 +59,10 @@ class InferencePlot:
                 color=c,
                 linewidth=2
             ))
-
-            # Get the highest probability
-            cl = p.argmax()
-
             # Draw the label
             text = ""
-            if self.show_tag and self.id2label[cl.item()] in self.show_tags:
-                text += f'{self.id2label[cl.item()]}:" '
+            if self.show_tag:
+                text += f'{tag}:" '
             if self.show_confidence:
                 text += f'{p[cl]:0.2f} '
             ax.text(xmin, ymin, text, fontsize=8, bbox=dict(facecolor='yellow', alpha=0.5))

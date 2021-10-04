@@ -6,10 +6,10 @@ import torchvision
 """
 class CocoDetection(torchvision.datasets.CocoDetection):
 
-    def __init__(self, img_folder, feature_extractor):
+    def __init__(self, img_folder, feature_extractor, coco_file="_annotations.coco.json"):
 
         # Get path image annotations
-        ann_file = os.path.join(img_folder, "_annotations.coco.json")
+        ann_file = os.path.join(img_folder, coco_file)
         
         # Default constructor
         super(CocoDetection, self).__init__(img_folder, ann_file)

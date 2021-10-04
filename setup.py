@@ -3,10 +3,10 @@ import os
 import setuptools
 from distutils.core import setup
 
-with open("README.md") as f:
+with open("README.md", encoding="utf8") as f:
     long_description = f.read()
 
-with open(os.path.join("hugsvision", "version.txt")) as f:
+with open(os.path.join("hugsvision", "version.txt"), encoding="utf8") as f:
     version = f.read().strip()
 
 setup(

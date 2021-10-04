@@ -71,7 +71,8 @@ class ObjectDetectionTrainer:
     nbr_gpus     = -1,
     model_path   = "facebook/detr-resnet-50",
     num_workers  = None,
-    save_pth = False
+    save_pth = False,
+    coco_file = "_annotations.coco.json"
   ):
 
     self.model_name        = model_name
@@ -126,10 +127,11 @@ class ObjectDetectionTrainer:
           f"train_path={train_path} "
           f"dev_path={dev_path} "
           f"test_path={test_path} "
-          f"output_dir={output_dir} ")
+          f"coco_file={coco_file} "
+          f"output_dir={self.output_dir} ")
 
     # Split and convert to dataloaders
-    self.train, self.dev, self.test = self.__splitDatasets(self.num_workers)
+    self.train, self.dev, self.test = self.__splitDatasets(self.num_workers, coco_file="_annotations.coco.json")
 
     # Get labels and build the id2label
 
@@ -171,7 +173,7 @@ class ObjectDetectionTrainer:
         gpus              = self.nbr_gpus,
         max_epochs        = self.max_epochs,
         max_steps         = self.max_steps,
-        default_root_dir  = self.output_dir,
+        default_root_dir  = self.output_path,
         gradient_clip_val = 0.1
     )
 
@@ -228,26 +230,29 @@ class ObjectDetectionTrainer:
   """
   ✂️ Split the dataset into sub-datasets
   """
-  def __splitDatasets(self, workers=None):
+  def __splitDatasets(self, workers=None, coco_file="_annotations.coco.json"):
 
     print("Load Datasets...")
     
     # Train Dataset in the COCO format
     self.train_dataset = CocoDetection(
         img_folder        = self.train_path,
-        feature_extractor = self.feature_extractor
+        feature_extractor = self.feature_extractor,
+        coco_file         = coco_file
     )
 
     # Dev Dataset in the COCO format
     self.val_dataset = CocoDetection(
         img_folder        = self.dev_path,
-        feature_extractor = self.feature_extractor
+        feature_extractor = self.feature_extractor,
+        coco_file         = coco_file
     )
 
     # Test Dataset in the COCO format
     self.test_dataset = CocoDetection(
         img_folder        = self.test_path,
-        feature_extractor = self.feature_extractor
+        feature_extractor = self.feature_extractor,
+        coco_file         = coco_file
     )
 
     print(self.train_dataset)
@@ -332,7 +337,7 @@ class ObjectDetectionTrainer:
 
     image, probas, bboxes_scaled = inference.predict(img_path)
     plot_inf = InferencePlot(inference.id2label,
-                             IMG_OUT=os.path.join(self.output_dir, "out_img"),
+                             IMG_OUT=os.path.join(self.output_path, "out_img"),
                              show_tag=show_tag, show_confidence=show_confidence, show_tags=show_tags)
     plot_inf.plot_results(image, probas, bboxes_scaled)
     return image, probas, bboxes_scaled
